@@ -1,0 +1,207 @@
+*{box-sizing:border-box}
+:root{
+  --bg:#414041;  /* master grey background */
+  --glass:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.12);
+  --text:#f1f1f1;
+  --accent:#6fe26f;
+}
+
+/* always fill entire screen with grey */
+html, body {
+  height:100%;
+  width:100%;
+  margin:0;
+  padding:0;
+  background-color: var(--bg);   /* <— this guarantees grey everywhere */
+  overflow:hidden;               /* prevent scrollbars */
+}
+
+body {
+  color:var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+}
+
+/* === FULLSCREEN STAGE === */
+.stage{
+  position:fixed;
+  inset:0;
+  width:100vw;
+  height:100vh;
+  display:block;
+  overflow:hidden;
+  background:transparent;   /* let root background show */
+}
+
+.stage .hero{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  background:transparent;   /* no need for its own background */
+  user-select:none;
+  pointer-events:none;
+  filter: saturate(1.02) contrast(1.02);
+}
+
+
+
+/* Hotspots (absolute percentages tuned for this image) */
+.hotspot{
+  position:absolute;
+  background:transparent;
+  border:0;
+  cursor:pointer;
+  outline:2px solid transparent; /* focus ring for accessibility */
+  outline-offset:4px;
+}
+.hotspot:focus-visible{ outline-color: var(--accent); }
+
+/* Play button area (approx. center) */
+.hotspot.play{
+  left: 28%;
+  right: 28%;
+  top: 46%;
+  bottom: 33%;
+}
+
+/* Settings button area (below Play) */
+.hotspot.settings{
+  left: 28%;
+  right: 28%;
+  top: 65%;
+  bottom: 14.5%;
+}
+
+/* Settings modal styling */
+dialog{
+  border:1px solid var(--border);
+  background:var(--glass);
+  border-radius:16px;
+  padding:0;
+  max-width:min(520px, 92vw);
+  box-shadow:0 24px 80px rgba(0,0,0,.55);
+  color:var(--text);
+  backdrop-filter: blur(10px);
+}
+dialog::backdrop{ background: rgba(0,0,0,.55); }
+.modal-card{ padding: 8px 16px 16px; }
+.modal-card header{ padding: 10px 4px 6px; }
+.modal-card h2{ margin:0; letter-spacing:.5px }
+.modal-body{ display:grid; gap:12px; padding:8px 0 4px }
+.row{ display:flex; align-items:center; gap:10px; }
+select, .btn, input[type="checkbox"]{ font-size:16px }
+.btn{
+  background:var(--accent);
+  border:none;
+  padding:10px 16px;
+  border-radius:10px;
+  font-weight:700;
+  cursor:pointer;
+}
+.btn.ghost{
+  background:transparent;
+  border:1px solid var(--border);
+  color:var(--text);
+}
+.modal-actions{ display:flex; gap:10px; justify-content:flex-end; padding-top:10px }
+
+/* Toast */
+#toast{
+  position:absolute;
+  bottom:12px;
+  left:50%;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.7);
+  color:#fff;
+  padding:10px 14px;
+  border-radius:999px;
+  font-weight:600;
+  opacity:0;
+  transition:opacity .3s ease;
+  pointer-events:none;
+}
+#toast.show{ opacity:1; }
+
+/* --- PIXEL/VOXEL STYLES FOR SETTINGS --- */
+.vox {
+  background: rgba(30,30,30,.9);
+  padding: 16px 18px 18px;
+  border-radius: 18px;
+  border: 0;
+  position: relative;
+}
+
+/* Title */
+.vox-title{
+  text-align:center;
+  margin: 6px 0 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  font-size: clamp(20px, 3.2vw, 28px);
+  text-shadow: 0 3px 0 rgba(0,0,0,.55);
+}
+
+/* Section headers */
+.vox-sub{
+  margin: 0 0 8px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  font-size: clamp(14px, 2.4vw, 18px);
+}
+
+/* Rows */
+.vox-section{ margin: 6px 0 14px; }
+.vox-row{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+
+/* Green pixel-frame button (matches landing look) */
+.vox-btn{
+  --g: #6fe26f;        /* neon green */
+  --g2: #3aa63a;       /* darker green */
+  --br: 14px;
+  border: 0;
+  padding: 12px 18px;
+  border-radius: var(--br);
+  font-weight: 900;
+  letter-spacing: .8px;
+  cursor: pointer;
+  color: #fff;
+  /* inner wooden panel */
+  background:
+    linear-gradient(#2d1203,#5b2e12) padding-box,
+    conic-gradient(from 45deg, var(--g) 25%, var(--g2) 0 50%, var(--g) 0 75%, var(--g2) 0) border-box;
+  border: 6px solid transparent;
+  box-shadow: 0 10px 0 rgba(0,0,0,.35), 0 0 0 3px rgba(0,0,0,.35) inset;
+  transform: translateY(0);
+  transition: transform .05s ease, filter .15s ease, box-shadow .15s ease;
+  font-size: clamp(14px, 2.4vw, 18px);
+}
+.vox-btn:hover{ filter: brightness(1.05); }
+.vox-btn:active{ transform: translateY(2px); box-shadow: 0 6px 0 rgba(0,0,0,.35), 0 0 0 3px rgba(0,0,0,.35) inset; }
+.vox-btn.ghost{
+  background: linear-gradient(#1d1d1d,#272727) padding-box;
+  border: 6px solid transparent;
+}
+
+/* Selected state (looks “pressed/active”) */
+.vox-btn.is-active{
+  filter: saturate(1.1) brightness(1.05);
+  box-shadow: 0 0 0 3px rgba(0,0,0,.55) inset, 0 6px 0 rgba(0,0,0,.35);
+}
+
+/* Footer actions */
+.vox-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top: 6px; }
+
+/* --- settings options (single-select with dark active) --- */
+.vox-btn.opt{
+  min-width: 110px;
+  text-align: center;
+}
+
+.vox-btn.opt.is-active,
+.vox-btn.opt[aria-pressed="true"]{
+  filter: brightness(0.5) saturate(1.15);   /* darker when selected */
+  box-shadow: 0 0 0 3px rgba(0,0,0,.6) inset, 0 6px 0 rgba(0,0,0,.35);
+  transform: translateY(2px);
+}

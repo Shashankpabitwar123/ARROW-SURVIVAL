@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arrow Survival — Landing</title>
+  <link rel="preload" href="assets/landing.png" as="image">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="stage" aria-label="Arrow Survival landing page">
+    <img src="assets/landing.png" alt="Arrow Survival landing screen with Play and Settings buttons" class="hero" />
+    <!-- Hotspots matching the Play and Settings buttons drawn in the image -->
+    <button class="hotspot play" aria-label="Play" title="Play"></button>
+    <button class="hotspot settings" aria-label="Settings" title="Settings"></button>
+
+    <!-- Settings modal -->
+    <dialog id="settingsDialog">
+      <form method="dialog" class="modal-card vox">
+        <h2 class="vox-title">SETTINGS</h2>
+    
+        <section class="vox-section">
+          <h3 class="vox-sub">DIFFICULTY</h3>
+          <div class="vox-row" data-group="difficulty">
+            <button type="button" class="vox-btn opt" data-value="easy" aria-pressed="false">EASY</button>
+            <button type="button" class="vox-btn opt" data-value="medium" aria-pressed="false">MEDIUM</button>
+            <button type="button" class="vox-btn opt" data-value="hard" aria-pressed="false">HARD</button>
+          </div>
+        </section>
+    
+        <section class="vox-section">
+          <h3 class="vox-sub">SOUND</h3>
+          <div class="vox-row" data-group="sound">
+            <button type="button" class="vox-btn opt" data-value="on" aria-pressed="false">ON</button>
+            <button type="button" class="vox-btn opt" data-value="off" aria-pressed="false">OFF</button>
+          </div>
+        </section>
+    
+        <div class="vox-actions">
+          <button class="vox-btn ghost" value="cancel">CLOSE</button>
+          <button id="saveBtn" class="vox-btn" value="default">SAVE</button>
+        </div>
+      </form>
+    </dialog>
+    
+    
+
+    <!-- Toast -->
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
