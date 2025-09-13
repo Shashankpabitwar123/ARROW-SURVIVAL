@@ -22,16 +22,12 @@
 
   <script src="main.js"></script>
   <script>
+    // Run countdown once this page loads
     window.addEventListener('load', () => {
-        const unlockAndStart = async () => {
-          try { await initAudio(); } catch (e) {}
-          startCountdown(() => {
-            // gameplay starts here after countdown
-          });
-        };
-        // require a real user gesture on *this* page
-        window.addEventListener('pointerdown', unlockAndStart, { once: true });
+      startCountdown(() => {
+        // gameplay starts here in next step
       });
+    });
   </script>
 </body>
 </html>
