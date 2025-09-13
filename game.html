@@ -10,6 +10,11 @@
   <main id="gameStage">
     <div id="gameBg"></div>
 
+    <!-- Tap-to-start overlay -->
+    <div id="tapStart" class="tap-start" aria-hidden="true">
+      <div class="tap-text">Tap anywhere to start</div>
+    </div>
+
     <!-- Countdown overlay -->
     <div id="countOverlay" aria-hidden="true">
       <div class="count-ring"></div>
@@ -22,18 +27,22 @@
 
   <script src="main.js"></script>
   <script>
-    // If the auto-start beeps were blocked by autoplay,
-    // the first tap on THIS page will unlock audio and (re)start the countdown.
-    window.addEventListener('pointerdown', (e) => {
-      e.preventDefault();      // avoid any stray link/download
-      e.stopPropagation();
-      try { initAudio(); } catch (err) {}
-      if (typeof startCountdown === 'function') {
+    window.addEventListener('load', () => {
+      const tap = document.getElementById('tapStart');
+  
+      const onFirst = async (e) => {
+        e.preventDefault(); e.stopPropagation();           // block stray links/downloads
+        window.removeEventListener('pointerdown', onFirst, true);
+        try { await initAudio(); } catch {}
+        tap?.remove();                                     // hide tap overlay
         startCountdown(() => {
           // gameplay starts here after countdown
         });
-      }
-    }, { once: true, capture: true });
+      };
+  
+      // one real gesture on THIS page to unlock audio + start countdown
+      window.addEventListener('pointerdown', onFirst, { once:true, capture:true });
+    });
   </script>
   
 </body>
