@@ -136,6 +136,7 @@
   // ====== (NEW) Minimal tone helper using same AudioContext ======
   function tone(freq = 600, dur = 0.3, type = 'sine', gain = 0.25){
     if (!audioCtx) return;
+    ensureAudioReady();      // <-- make sure this line exists
     const osc = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     osc.type = type;
