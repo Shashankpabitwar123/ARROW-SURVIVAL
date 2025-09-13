@@ -22,11 +22,17 @@
 
   <script src="main.js"></script>
   <script>
-    // Run countdown once this page loads
     window.addEventListener('load', () => {
-      startCountdown(() => {
-        // gameplay starts here in next step
-      });
+      const unlockAndStart = async (e) => {
+        if (e) { e.preventDefault(); e.stopPropagation(); }        // block stray link/download
+        window.removeEventListener('pointerdown', unlockAndStart, true);
+        try { await initAudio(); } catch {}
+        startCountdown(() => {
+          // gameplay starts here after countdown
+        });
+      };
+      // capture = true so we intercept before any links/buttons handle the event
+      window.addEventListener('pointerdown', unlockAndStart, { once: true, capture: true });
     });
   </script>
 </body>
