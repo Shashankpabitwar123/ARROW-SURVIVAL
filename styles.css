@@ -205,3 +205,47 @@ select, .btn, input[type="checkbox"]{ font-size:16px }
   box-shadow: 0 0 0 3px rgba(0,0,0,.6) inset, 0 6px 0 rgba(0,0,0,.35);
   transform: translateY(2px);
 }
+
+
+
+/* === GAME PAGE BG + BLUR & COUNTDOWN === */
+#gameStage { position: fixed; inset: 0; overflow: hidden; }
+#gameBg {
+  position: absolute; inset: 0;
+  background: url("assets/game-bg.png") center/cover no-repeat;
+  z-index: 0;
+  transition: filter .3s ease, transform .3s ease;
+}
+#gameBg.is-blurred {
+  filter: blur(6px) brightness(.9);
+  transform: scale(1.02);
+  z-index: 1;
+}
+
+#countOverlay {
+  position: absolute; inset: 0;
+  display: none; place-items: center;
+  background: rgba(0,0,0,.28);
+  z-index: 2; pointer-events: none;
+}
+#countOverlay.is-visible { display: grid; }
+
+#gameCanvas { position: relative; z-index: 3; }
+
+.count-num{
+  font-weight: 900;
+  font-size: clamp(48px, 16vw, 180px);
+  color: #fff;
+  text-shadow: 0 6px 0 rgba(0,0,0,.35), 0 0 24px rgba(0,0,0,.45);
+  animation: pop .35s ease;
+}
+@keyframes pop{
+  0%{ transform: scale(.6); opacity:.2 }
+  60%{ transform: scale(1.1); opacity:1 }
+  100%{ transform: scale(1) }
+}
+.count-ring{
+  position: absolute; width: 64vmin; height: 64vmin; border-radius: 50%;
+  border: 10px solid rgba(255,255,255,.18);
+  box-shadow: 0 0 0 4px rgba(0,0,0,.25) inset;
+}

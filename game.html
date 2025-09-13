@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arrow Survival — Game</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="gameStage">
+    <div id="gameBg"></div>
+
+    <!-- Countdown overlay -->
+    <div id="countOverlay" aria-hidden="true">
+      <div class="count-ring"></div>
+      <div id="countNum" class="count-num">3</div>
+    </div>
+
+    <!-- Canvas placeholder (we'll use later) -->
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+  </main>
+
+  <script src="main.js"></script>
+  <script>
+    // Run countdown once this page loads
+    window.addEventListener('load', () => {
+      startCountdown(() => {
+        // gameplay starts here in next step
+      });
+    });
+  </script>
+</body>
+</html>

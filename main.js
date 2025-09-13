@@ -72,9 +72,10 @@
   });
 
   // ----- PLAY -----
-  playBtn?.addEventListener('click', () => {
-    showToast('Play clicked — starting game…');
-    // window.location.href = 'game.html';
+  // Landing page: Play → go to game page
+  playBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.href = 'game.html';
   });
 
   // Utilities for single-select groups
@@ -131,4 +132,76 @@
       showToast('Settings saved');
     }
   });
+
+  // ====== (NEW) Minimal tone helper using same AudioContext ======
+  function tone(freq = 600, dur = 0.3, type = 'sine', gain = 0.25){
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.value = gain;
+    osc.connect(g).connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    osc.start(now);
+    // fade in/out to avoid clicks
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(gain, now + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.stop(now + dur + 0.05);
+  }
+
+  // ====== (NEW) Countdown that blurs the game background on game.html ======
+  // Usage: call startCountdown(() => { /* start gameplay */ }) on the game page.
+  let isCounting = false;
+  async function startCountdown(onDone){
+    if (isCounting) return;
+    isCounting = true;
+    try { await initAudio(); } catch {}
+
+    const overlay = document.getElementById('countOverlay');
+    const numEl   = document.getElementById('countNum');
+    // Target #gameBg on game page; fallback to .hero if called on landing (won't blur landing now)
+    const gameBg  = document.getElementById('gameBg') || document.querySelector('.hero');
+
+    if (!overlay || !numEl || !gameBg){
+      console.warn('Countdown elements missing');
+      isCounting = false;
+      return;
+    }
+
+    overlay.classList.add('is-visible');
+    gameBg.classList.add('is-blurred');
+
+    const seq = [3, 2, 1];
+    let i = 0;
+
+    const tick = () => {
+      const n = seq[i];
+      numEl.textContent = n;
+      // 3→2→1 tones (420, 540, 660 Hz)
+      tone(420 + i * 120, 0.28, 'sine', 0.28);
+      // retrigger pop animation
+      numEl.style.animation = 'none'; void numEl.offsetWidth; numEl.style.animation = '';
+      i++;
+      if (i < seq.length){
+        setTimeout(tick, 820);
+      } else {
+        // GO sting, then unblur and finish
+        setTimeout(() => {
+          tone(880, 0.12, 'square', 0.25);
+          setTimeout(() => tone(1200, 0.18, 'square', 0.2), 90);
+          overlay.classList.remove('is-visible');
+          gameBg.classList.remove('is-blurred');
+          isCounting = false;
+          document.dispatchEvent(new CustomEvent('arrowSurvival:gameStart'));
+          if (typeof onDone === 'function') onDone();
+        }, 780);
+      }
+    };
+    tick();
+  }
+
+  // Expose startCountdown to the page scope (so game.html inline script can call it)
+  window.startCountdown = startCountdown;
 })();
