@@ -22,12 +22,19 @@
 
   <script src="main.js"></script>
   <script>
-    // Run countdown once this page loads
-    window.addEventListener('load', () => {
+  // If the auto-start beeps were blocked by autoplay,
+  // the first tap on THIS page will unlock audio and (re)start the countdown.
+  window.addEventListener('pointerdown', (e) => {
+    e.preventDefault();      // avoid any stray link/download
+    e.stopPropagation();
+    try { initAudio(); } catch (err) {}
+    if (typeof startCountdown === 'function') {
       startCountdown(() => {
-        // gameplay starts here in next step
+        // gameplay starts here after countdown
       });
-    });
-  </script>
+    }
+  }, { once: true, capture: true });
+</script>
+
 </body>
 </html>
