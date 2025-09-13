@@ -204,4 +204,226 @@
 
   // Expose startCountdown to the page scope (so game.html inline script can call it)
   window.startCountdown = startCountdown;
+
+    // ======================= GAME RUNTIME (12-frame sheets) =======================
+  // Expects:
+  //   assets/player.png   (4 rows: Down, Left, Right, Up; 3 cols: Idle, StepA, StepB)
+  //   assets/attacker.png (same layout)
+  // Runs on game.html after the countdown dispatches 'arrowSurvival:gameStart'
+
+  // ---- helpers ----
+  function loadImage(src){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  class SpriteSheet {
+    constructor(img, rows=4, cols=3){
+      this.img = img;
+      this.rows = rows; this.cols = cols;
+      this.fw = Math.floor(img.width / cols);
+      this.fh = Math.floor(img.height / rows);
+      this.row = 0;     // 0:down, 1:left, 2:right, 3:up
+      this.col = 0;     // 0..cols-1
+      this.x = 400; this.y = 300;
+      this.vx = 0; this.vy = 0;
+      this.speed = 180;
+      this.stepFps = 10;     // walk cycle speed
+      this._acc = 0;
+      this.scale = 0.5;
+    }
+    faceByVelocity(){
+      const ax = Math.abs(this.vx), ay = Math.abs(this.vy);
+      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;        // Right / Left
+      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;    // Down / Up
+    }
+    update(dt){
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      const moving = (this.vx || this.vy);
+      if (moving){
+        this._acc += dt;
+        const frameDur = 1 / this.stepFps;
+        while (this._acc >= frameDur){
+          this._acc -= frameDur;
+          this.col = (this.col + 1) % this.cols; // 0→1→2→0
+        }
+      } else {
+        this.col = 0; // idle
+      }
+    }
+    draw(ctx){
+      const PAD = 4; // inset to avoid sampling neighbor frame (use 1 if needed)
+    
+      // source rect (slightly inset)
+      const sx = Math.floor(this.col * this.fw + PAD);
+      const sy = Math.floor(this.row * this.fh + PAD);
+      const sw = Math.ceil(this.fw - PAD * 2);
+      const sh = Math.ceil(this.fh - PAD * 2);
+    
+      // destination size (respect scale) snapped to integers
+      const scale = this.scale ?? 1;
+      const dw = Math.round(this.fw * scale);
+      const dh = Math.round(this.fh * scale);
+    
+      // destination position snapped to integers
+      const dx = Math.round(this.x - dw / 2);
+      const dy = Math.round(this.y - dh / 2);
+    
+      ctx.drawImage(this.img, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+    
+  }
+
+  // projectiles
+  const arrows = [];
+  function shootArrow(fromX, fromY, targetX, targetY){
+    const dx = targetX - fromX, dy = targetY - fromY;
+    const len = Math.hypot(dx, dy) || 1;
+    const speed = 260;
+    arrows.push({ x: fromX, y: fromY, vx: (dx/len)*speed, vy: (dy/len)*speed, life: 5 });
+  }
+
+  // keyboard
+  const keys = new Set();
+  window.addEventListener('keydown', e => {
+    const ok = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'];
+    if (ok.includes(e.key)) { keys.add(e.key); e.preventDefault(); }
+  });
+  window.addEventListener('keyup', e => keys.delete(e.key));
+
+  async function initGameRuntime(){
+    const canvas = document.getElementById('gameCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;        // <- no bilinear blur
+    canvas.style.imageRendering = 'pixelated'; // <- CSS nearest-neighbor
+
+    // Optional crisp pixel look:
+    // ctx.imageSmoothingEnabled = false;
+    // canvas.style.imageRendering = 'pixelated';
+
+    // scale canvas to screen while keeping 800x600 logical pixels
+    function fitCanvas(){
+      // raw scale needed to fit 800x600 into the window
+      const raw = Math.min(window.innerWidth / canvas.width,
+                           window.innerHeight / canvas.height);
+    
+      // snap to 0.5 steps: 1.0, 1.5, 2.0, 2.5, ...
+      const scale = Math.round(raw * 4) / 4;
+    
+      canvas.style.position = 'absolute';
+      canvas.style.left = '50%';
+      canvas.style.top  = '50%';
+      canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    }
+    
+    fitCanvas(); addEventListener('resize', fitCanvas);
+
+    const [playerImg, attackerImg] = await Promise.all([
+      loadImage('assets/player.png'),
+      loadImage('assets/attacker.png'),
+    ]);
+
+    const player = new SpriteSheet(playerImg);
+    player.x = canvas.width * 0.25;
+    player.y = canvas.height * 0.5;
+    player.speed = 350;
+    player.scale = 1; // tweak 0.8–1.2 if needed
+
+    const attacker = new SpriteSheet(attackerImg, 1, 1);
+    attacker.x = canvas.width * 0.75;
+    attacker.y = canvas.height * 0.5;
+    attacker.speed = 100;
+    attacker.scale = 1; // tweak 0.8–1.2 if needed
+
+    let shootTimer = 0;
+    const shootEvery = 3.0;
+
+    function updatePlayerVelocity(){
+      let vx = 0, vy = 0;
+      if (keys.has('ArrowLeft') || keys.has('a'))  vx -= 1;
+      if (keys.has('ArrowRight')|| keys.has('d'))  vx += 1;
+      if (keys.has('ArrowUp')   || keys.has('w'))  vy -= 1;
+      if (keys.has('ArrowDown') || keys.has('s'))  vy += 1;
+      const len = Math.hypot(vx, vy) || 1;
+      player.vx = (vx/len) * player.speed;
+      player.vy = (vy/len) * player.speed;
+      if (vx || vy) player.faceByVelocity();
+    }
+
+    function updateAttackerVelocity(){
+      const dx = player.x - attacker.x;
+      const dy = player.y - attacker.y;
+      const len = Math.hypot(dx, dy) || 1;
+      attacker.vx = (dx/len) * attacker.speed;
+      attacker.vy = (dy/len) * attacker.speed;
+      // Do NOT call attacker.faceByVelocity(); rows=1 must always stay row 0
+    }
+
+    // main loop
+    let last = performance.now();
+    function loop(now){
+      const dt = Math.min(0.033, (now - last)/1000);
+      last = now;
+
+      updatePlayerVelocity();
+      updateAttackerVelocity();
+
+      player.update(dt);
+      attacker.update(dt);
+
+      // keep inside canvas
+      const padP = Math.max(player.fw, player.fh)/2;
+      const padA = Math.max(attacker.fw, attacker.fh)/2;
+      player.x = Math.max(padP, Math.min(canvas.width - padP, player.x));
+      player.y = Math.max(padP, Math.min(canvas.height - padP, player.y));
+      attacker.x = Math.max(padA, Math.min(canvas.width - padA, attacker.x));
+      attacker.y = Math.max(padA, Math.min(canvas.height - padA, attacker.y));
+
+      // shooting
+      shootTimer += dt;
+      if (shootTimer >= shootEvery){
+        shootTimer = 0;
+        shootArrow(attacker.x, attacker.y, player.x, player.y);
+      }
+
+      // arrows update
+      for (let i = arrows.length - 1; i >= 0; i--){
+        const a = arrows[i];
+        a.x += a.vx * dt;
+        a.y += a.vy * dt;
+        a.life -= dt;
+        if (a.life <= 0 || a.x < -50 || a.x > canvas.width+50 || a.y < -50 || a.y > canvas.height+50){
+          arrows.splice(i, 1);
+        }
+      }
+
+      // draw
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // draw arrows as lines (replace with sprite later if you want)
+      ctx.lineWidth = 3;
+      for (const a of arrows){
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(a.x - a.vx*0.05, a.y - a.vy*0.05);
+        ctx.stroke();
+      }
+
+      player.draw(ctx);
+      attacker.draw(ctx);
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // Start when countdown finishes
+  document.addEventListener('arrowSurvival:gameStart', initGameRuntime);
+
 })();
