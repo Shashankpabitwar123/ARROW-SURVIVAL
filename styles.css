@@ -270,3 +270,71 @@ select, .btn, input[type="checkbox"]{ font-size:16px }
   animation:pulse 1.6s ease-in-out infinite;
 }
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.05);opacity:1}}
+
+
+
+/* ===== HUD (lives + score) ===== */
+.hud{
+  position:absolute;
+  top:12px;
+  right:12px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-size: 18px; 
+  padding:10px 14px;      /*new*/
+  background:rgba(0,0,0,.25);
+  border:1px solid var(--border);
+  border-radius:12px;
+  backdrop-filter: blur(6px);
+  font-weight:600;
+  user-select:none;
+  pointer-events:none; /* let clicks pass through */
+  box-shadow: 0 6px 24px rgba(0,0,0,.25), 0 0 22px rgba(0,200,255,.12);
+
+}
+.hud .lives{ color:#ff4d4d;
+            font-size: 22px;  
+             letter-spacing:2px; }
+.hud .score{ color:var(--text); }
+.hud .sep{ opacity:.6 }
+
+/* ===== Game Over Overlay ===== */
+.game-over{
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  background:rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  z-index:50;
+}
+.game-over.hidden{ display:none; }
+.go-card{
+  min-width:260px;
+  max-width:90vw;
+  padding:20px;
+  border-radius:16px;
+  background:var(--glass);
+  border:1px solid var(--border);
+  color:var(--text);
+  text-align:center;
+  box-shadow:0 10px 30px rgba(0,0,0,.45);
+}
+.go-card h2{ margin:6px 0 10px; font-size:1.5rem; }
+.go-meta{ opacity:.8; margin-bottom:14px; }
+.go-actions{ display:flex; gap:10px; justify-content:center; }
+.btn{
+  pointer-events:auto; /* clickable even if parent is pointer-events:none */
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.07);
+  color:var(--text);
+  font-weight:600;
+  cursor:pointer;
+  transition: transform .08s ease;
+}
+.btn:hover{ transform: translateY(-1px); }
+.btn:active{ transform: translateY(1px); }
+.btn-ghost{ background:transparent; }

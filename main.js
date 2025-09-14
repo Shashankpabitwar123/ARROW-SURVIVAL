@@ -44,17 +44,14 @@
       const src = audioCtx.createBufferSource();
       src.buffer = clickBuffer;
       src.connect(clickGain);
-      // start immediately with zero scheduling delay
       src.start(0);
       return;
     }
-    // Fallback (rare): if buffer not ready yet, fall back to <audio>
     const a = new Audio('assets/click.wav');
     a.volume = 0.8;
     a.play();
   }
 
-  // Initialize audio on the first user interaction (required by autoplay policies)
   window.addEventListener('pointerdown', async () => { try { await initAudio(); } catch {} }, { once: true });
 
   function showToast(msg){
@@ -72,7 +69,6 @@
   });
 
   // ----- PLAY -----
-  // Landing page: Play → go to game page
   playBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     window.location.href = 'game.html';
@@ -133,10 +129,10 @@
     }
   });
 
-  // ====== (NEW) Minimal tone helper using same AudioContext ======
+  // ====== Minimal tone helper using same AudioContext ======
   function tone(freq = 600, dur = 0.3, type = 'sine', gain = 0.25){
     if (!audioCtx) return;
-    ensureAudioReady();      // <-- make sure this line exists
+    ensureAudioReady();
     const osc = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     osc.type = type;
@@ -145,15 +141,13 @@
     osc.connect(g).connect(audioCtx.destination);
     const now = audioCtx.currentTime;
     osc.start(now);
-    // fade in/out to avoid clicks
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(gain, now + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     osc.stop(now + dur + 0.05);
   }
 
-  // ====== (NEW) Countdown that blurs the game background on game.html ======
-  // Usage: call startCountdown(() => { /* start gameplay */ }) on the game page.
+  // ====== Countdown that blurs the game background on game.html ======
   let isCounting = false;
   async function startCountdown(onDone){
     if (isCounting) return;
@@ -162,7 +156,6 @@
 
     const overlay = document.getElementById('countOverlay');
     const numEl   = document.getElementById('countNum');
-    // Target #gameBg on game page; fallback to .hero if called on landing (won't blur landing now)
     const gameBg  = document.getElementById('gameBg') || document.querySelector('.hero');
 
     if (!overlay || !numEl || !gameBg){
@@ -180,15 +173,12 @@
     const tick = () => {
       const n = seq[i];
       numEl.textContent = n;
-      // 3→2→1 tones (420, 540, 660 Hz)
       tone(420 + i * 120, 0.28, 'sine', 0.28);
-      // retrigger pop animation
       numEl.style.animation = 'none'; void numEl.offsetWidth; numEl.style.animation = '';
       i++;
       if (i < seq.length){
         setTimeout(tick, 820);
       } else {
-        // GO sting, then unblur and finish
         setTimeout(() => {
           tone(880, 0.12, 'square', 0.25);
           setTimeout(() => tone(1200, 0.18, 'square', 0.2), 90);
@@ -203,10 +193,9 @@
     tick();
   }
 
-  // Expose startCountdown to the page scope (so game.html inline script can call it)
   window.startCountdown = startCountdown;
 
-    // ======================= GAME RUNTIME (12-frame sheets) =======================
+  // ======================= GAME RUNTIME (12-frame sheets) =======================
   // Expects:
   //   assets/player.png   (4 rows: Down, Left, Right, Up; 3 cols: Idle, StepA, StepB)
   //   assets/attacker.png (same layout)
@@ -233,14 +222,14 @@
       this.x = 400; this.y = 300;
       this.vx = 0; this.vy = 0;
       this.speed = 180;
-      this.stepFps = 10;     // walk cycle speed
+      this.stepFps = 10;
       this._acc = 0;
       this.scale = 0.5;
     }
     faceByVelocity(){
       const ax = Math.abs(this.vx), ay = Math.abs(this.vy);
-      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;        // Right / Left
-      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;    // Down / Up
+      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;
+      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;
     }
     update(dt){
       this.x += this.vx * dt;
@@ -251,33 +240,25 @@
         const frameDur = 1 / this.stepFps;
         while (this._acc >= frameDur){
           this._acc -= frameDur;
-          this.col = (this.col + 1) % this.cols; // 0→1→2→0
+          this.col = (this.col + 1) % this.cols;
         }
       } else {
-        this.col = 0; // idle
+        this.col = 0;
       }
     }
     draw(ctx){
-      const PAD = 4; // inset to avoid sampling neighbor frame (use 1 if needed)
-    
-      // source rect (slightly inset)
+      const PAD = 4;
       const sx = Math.floor(this.col * this.fw + PAD);
       const sy = Math.floor(this.row * this.fh + PAD);
       const sw = Math.ceil(this.fw - PAD * 2);
       const sh = Math.ceil(this.fh - PAD * 2);
-    
-      // destination size (respect scale) snapped to integers
       const scale = this.scale ?? 1;
       const dw = Math.round(this.fw * scale);
       const dh = Math.round(this.fh * scale);
-    
-      // destination position snapped to integers
       const dx = Math.round(this.x - dw / 2);
       const dy = Math.round(this.y - dh / 2);
-    
       ctx.drawImage(this.img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
-    
   }
 
   // projectiles
@@ -298,31 +279,84 @@
   window.addEventListener('keyup', e => keys.delete(e.key));
 
   async function initGameRuntime(){
+
+    /* HUD + Diamonds */
+    const hudLives = document.getElementById('lives');
+    const hudScore = document.getElementById('score');
+    const gameOverEl = document.getElementById('gameOver');
+    const finalScoreEl = document.getElementById('finalScore');
+    const bestScoreEl = document.getElementById('bestScore');
+    const restartBtn = document.getElementById('restartBtn');
+    const homeBtn = document.getElementById('homeBtn');
+
+    let lives = 2;
+    let diamonds = 0;
+    let best = Number(localStorage.getItem('arrowSurvival.bestDiamonds') || 0);
+    let invuln = 0;
+    let isGameOver = false;
+
+    // Diamond state
+    let diamond = null;       // { x, y, size }
+    let diamondTimer = null;  // timeout id
+
+    function updateHUD(){
+      hudLives.textContent = lives === 2 ? '❤️❤️' : (lives === 1 ? '❤️' : '');
+      hudScore.textContent = `💎 ${diamonds}`;
+    }
+    function scheduleDiamondSpawn(delayMs){
+      if (diamondTimer){ clearTimeout(diamondTimer); diamondTimer = null; }
+      diamondTimer = setTimeout(spawnDiamond, delayMs);
+    }
+    function spawnDiamond(){
+      const margin = 40;
+      const x = Math.random() * (canvas.width - margin*2) + margin;
+      const y = Math.random() * (canvas.height - margin*2) + margin;
+      diamond = { x, y, size: 12 };
+    }
+    function collectDiamond(){
+      diamonds += 1;
+      diamond = null;
+      updateHUD();
+      scheduleDiamondSpawn(2000);
+    }
+    function showGameOver(){
+      isGameOver = true;
+      finalScoreEl.textContent = `Score: ${diamonds}`;
+      if (diamonds > best){
+        best = diamonds;
+        localStorage.setItem('arrowSurvival.bestDiamonds', String(best));
+      }
+      bestScoreEl.textContent = `Best: ${best}`;
+      gameOverEl.classList.remove('hidden');
+    }
+    function takeHit(){
+      if (invuln > 0 || isGameOver) return;
+      lives = Math.max(0, lives - 1);
+      invuln = 1.0;
+      updateHUD();
+      if (lives <= 0) showGameOver();
+    }
+
+    updateHUD();
+    restartBtn?.addEventListener('click', () => location.reload());
+    homeBtn?.addEventListener('click', () => { location.href = 'index.html'; });
+    scheduleDiamondSpawn(0);
+
     const canvas = document.getElementById('gameCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;        // <- no bilinear blur
-    canvas.style.imageRendering = 'pixelated'; // <- CSS nearest-neighbor
+    ctx.imageSmoothingEnabled = false;
+    canvas.style.imageRendering = 'pixelated';
 
-    // Optional crisp pixel look:
-    // ctx.imageSmoothingEnabled = false;
-    // canvas.style.imageRendering = 'pixelated';
-
-    // scale canvas to screen while keeping 800x600 logical pixels
     function fitCanvas(){
-      // raw scale needed to fit 800x600 into the window
       const raw = Math.min(window.innerWidth / canvas.width,
                            window.innerHeight / canvas.height);
-    
-      // snap to 0.5 steps: 1.0, 1.5, 2.0, 2.5, ...
       const scale = Math.round(raw * 4) / 4;
-    
       canvas.style.position = 'absolute';
       canvas.style.left = '50%';
       canvas.style.top  = '50%';
       canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
     }
-    
     fitCanvas(); addEventListener('resize', fitCanvas);
 
     const [playerImg, attackerImg] = await Promise.all([
@@ -334,16 +368,45 @@
     player.x = canvas.width * 0.25;
     player.y = canvas.height * 0.5;
     player.speed = 350;
-    player.scale = 1; // tweak 0.8–1.2 if needed
+    player.scale = 1;
 
-    const attacker = new SpriteSheet(attackerImg, 1, 1);
-    attacker.x = canvas.width * 0.75;
-    attacker.y = canvas.height * 0.5;
-    attacker.speed = 100;
-    attacker.scale = 1; // tweak 0.8–1.2 if needed
+    // -------- Difficulty → attackers count --------
+    function getDifficulty(){
+      try {
+        return (localStorage.getItem('arrowSurvival:difficulty') || 'easy').toLowerCase();
+      } catch { return 'easy'; }
+    }
+    const diff = getDifficulty();
+    const numAttackers = (diff === 'hard') ? 3
+                    : (diff === 'medium' || diff === 'normal') ? 2
+                    : 1;
 
-    let shootTimer = 0;
+
+    const attackers = [];
     const shootEvery = 3.0;
+
+    function spawnAttackers(n){
+      for (let i = 0; i < n; i++){
+        const a = new SpriteSheet(attackerImg, 1, 1);
+        a.speed = 95 + Math.random() * 30;      // slight speed variance
+        a.scale = 1;
+    
+        // spread initial positions
+        const ang = (i / Math.max(1, n)) * Math.PI * 2;
+        a.x = canvas.width * 0.75 + Math.cos(ang) * 150;
+        a.y = canvas.height * 0.50 + Math.sin(ang) * 150;
+    
+        // unique orbit/strafe params
+        a.phase   = Math.random() * Math.PI * 2;
+        a.freq    = 0.7 + Math.random() * 0.6;  // Hz-ish
+        a.orbitR  = 170  + Math.random() * 80;   // px---------------------------------------
+        a.shootTimer = Math.random() * 2.0;     // stagger first shots
+    
+        attackers.push(a);
+      }
+    }
+    
+    spawnAttackers(numAttackers);
 
     function updatePlayerVelocity(){
       let vx = 0, vy = 0;
@@ -357,57 +420,161 @@
       if (vx || vy) player.faceByVelocity();
     }
 
-    function updateAttackerVelocity(){
-      const dx = player.x - attacker.x;
-      const dy = player.y - attacker.y;
-      const len = Math.hypot(dx, dy) || 1;
-      attacker.vx = (dx/len) * attacker.speed;
-      attacker.vy = (dy/len) * attacker.speed;
-      // Do NOT call attacker.faceByVelocity(); rows=1 must always stay row 0
+    function updateAttackersVelocity(t){
+      const SEP_RADIUS   = 300;   // start pushing apart under this distance  --------------------------
+      const SEP_WEIGHT   = 3;  // how strong separation bends direction  --------------------------
+    
+      for (const a of attackers){
+        // --- target offset: strafe around player on a little orbit ---
+        const dxp = player.x - a.x, dyp = player.y - a.y;
+        const lenp = Math.hypot(dxp, dyp) || 1;
+        const nx = dxp / lenp, ny = dyp / lenp;     // to player (unit)
+        const px = -ny, py = nx;                    // perpendicular (unit)
+    
+        const strafe = Math.sin(t * a.freq + a.phase); // -1..1
+        const tx = player.x + px * (strafe * a.orbitR);
+        const ty = player.y + py * (strafe * a.orbitR);
+    
+        // base chase toward offset target
+        let dx = tx - a.x, dy = ty - a.y;
+        let len = Math.hypot(dx, dy) || 1;
+        let vx = dx / len, vy = dy / len;
+    
+        // --- separation from other attackers (short-range repulsion) ---
+        let sx = 0, sy = 0;
+        for (const b of attackers){
+          if (b === a) continue;
+          const ddx = a.x - b.x, ddy = a.y - b.y;
+          const d   = Math.hypot(ddx, ddy) || 1e-6;
+          if (d < SEP_RADIUS){
+            const push = (SEP_RADIUS - d) / SEP_RADIUS; // 0..1
+            sx += (ddx / d) * push;
+            sy += (ddy / d) * push;
+          }
+        }
+    
+        // blend base chase with separation and renormalize to speed
+        vx += sx * SEP_WEIGHT;
+        vy += sy * SEP_WEIGHT;
+    
+        len = Math.hypot(vx, vy) || 1;
+        a.vx = (vx / len) * a.speed;
+        a.vy = (vy / len) * a.speed;
+      }
     }
+    
 
     // main loop
     let last = performance.now();
+    let elapsed = 0; 
+
     function loop(now){
       const dt = Math.min(0.033, (now - last)/1000);
       last = now;
+      elapsed += dt;  
+
+      if (invuln > 0) invuln = Math.max(0, invuln - dt);
+      if (isGameOver) return;
 
       updatePlayerVelocity();
-      updateAttackerVelocity();
+      updateAttackersVelocity(elapsed);
 
       player.update(dt);
-      attacker.update(dt);
+      for (const a of attackers) a.update(dt);
 
       // keep inside canvas
       const padP = Math.max(player.fw, player.fh)/2;
-      const padA = Math.max(attacker.fw, attacker.fh)/2;
       player.x = Math.max(padP, Math.min(canvas.width - padP, player.x));
       player.y = Math.max(padP, Math.min(canvas.height - padP, player.y));
-      attacker.x = Math.max(padA, Math.min(canvas.width - padA, attacker.x));
-      attacker.y = Math.max(padA, Math.min(canvas.height - padA, attacker.y));
+      for (const a of attackers){
+        const padA = Math.max(a.fw, a.fh)/2;
+        a.x = Math.max(padA, Math.min(canvas.width - padA, a.x));
+        a.y = Math.max(padA, Math.min(canvas.height - padA, a.y));
+      }
 
-      // shooting
-      shootTimer += dt;
-      if (shootTimer >= shootEvery){
-        shootTimer = 0;
-        shootArrow(attacker.x, attacker.y, player.x, player.y);
+      // per-attacker shooting
+      for (const a of attackers){
+        a.shootTimer = (a.shootTimer || 0) + dt;
+        if (a.shootTimer >= shootEvery){
+          a.shootTimer = 0;
+          shootArrow(a.x, a.y, player.x, player.y);
+        }
       }
 
       // arrows update
       for (let i = arrows.length - 1; i >= 0; i--){
-        const a = arrows[i];
-        a.x += a.vx * dt;
-        a.y += a.vy * dt;
-        a.life -= dt;
-        if (a.life <= 0 || a.x < -50 || a.x > canvas.width+50 || a.y < -50 || a.y > canvas.height+50){
+        const arw = arrows[i];
+        arw.x += arw.vx * dt;
+        arw.y += arw.vy * dt;
+        arw.life -= dt;
+        if (arw.life <= 0 || arw.x < -50 || arw.x > canvas.width+50 || arw.y < -50 || arw.y > canvas.height+50){
           arrows.splice(i, 1);
+        }
+      }
+
+      // COLLISION: projectiles → player
+      {
+        const pr = 18;
+        for (let i = arrows.length - 1; i >= 0; i--){
+          const a = arrows[i];
+          const dx = a.x - player.x, dy = a.y - player.y;
+          if (dx*dx + dy*dy <= pr*pr){
+            arrows.splice(i, 1);
+            takeHit();
+          }
+        }
+      }
+
+      // COLLISION: attacker body → player (instant game over)
+      {
+        const pr = 18, ar = 18;
+        for (const a of attackers){
+          const dx = a.x - player.x, dy = a.y - player.y;
+          if (dx*dx + dy*dy <= (pr + ar) * (pr + ar)){
+            lives = 0;
+            updateHUD();
+            showGameOver();
+            break;
+          }
+        }
+      }
+
+      // DIAMOND collection
+      if (diamond){
+        const dx = diamond.x - player.x, dy = diamond.y - player.y;
+        const r = 18 + diamond.size;
+        if (dx*dx + dy*dy <= r*r){
+          collectDiamond();
         }
       }
 
       // draw
       ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      // draw arrows as lines (replace with sprite later if you want)
+      // draw diamond as emoji (matches high score), with glow
+      if (diamond){
+        const _now = (typeof now === 'number' ? now : performance.now());
+        const pulse = 1 + 0.06 * Math.sin(_now * 0.006);
+        const px = Math.max(20, diamond.size * 1.8) * pulse;
+
+        ctx.save();
+        ctx.translate(diamond.x, diamond.y);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${px}px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif`;
+
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.shadowColor = 'rgba(0,220,255,0.9)';
+        ctx.shadowBlur = 18;
+        ctx.fillText('💎', 0, 0);
+        ctx.restore();
+
+        ctx.fillText('💎', 0, 0);
+        ctx.restore();
+      }
+
+      // draw arrows as lines
       ctx.lineWidth = 3;
       for (const a of arrows){
         ctx.beginPath();
@@ -417,7 +584,7 @@
       }
 
       player.draw(ctx);
-      attacker.draw(ctx);
+      for (const a of attackers) a.draw(ctx);
 
       requestAnimationFrame(loop);
     }
