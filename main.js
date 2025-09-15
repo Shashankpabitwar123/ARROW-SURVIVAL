@@ -365,7 +365,7 @@
     const dx = targetX - fromX, dy = targetY - fromY;
     const len = Math.hypot(dx, dy) || 1;
     const speed = 260;
-    arrows.push({ x: fromX, y: fromY, vx: (dx/len)*speed, vy: (dy/len)*speed, life: 5 });
+    arrows.push({ x: fromX, y: fromY, px: fromX, py: fromY, vx: (dx/len)*speed, vy: (dy/len)*speed, life: 5 });
   }
 
   // keyboard
@@ -587,6 +587,18 @@
       }
     }
 
+    function circleSegHit(cx, cy, r, x1, y1, x2, y2){
+      const dx = x2 - x1, dy = y2 - y1;
+      const l2 = dx*dx + dy*dy;
+      let t = 0;
+      if (l2 > 0) t = ((cx - x1)*dx + (cy - y1)*dy) / l2; // projection
+      t = Math.max(0, Math.min(1, t));                     // clamp to segment
+      const px = x1 + t*dx, py = y1 + t*dy;
+      const d2 = (cx - px)*(cx - px) + (cy - py)*(cy - py);
+      return d2 <= r*r;
+    }
+    
+
     // main loop
     let last = performance.now();
     let elapsed = 0;
@@ -635,29 +647,33 @@
         }
       }
 
-      // arrows update
+      // arrows update (remember previous position for swept collision)
       for (let i = arrows.length - 1; i >= 0; i--){
-        const arw = arrows[i];
-        arw.x += arw.vx * dt;
-        arw.y += arw.vy * dt;
-        arw.life -= dt;
-        if (arw.life <= 0 || arw.x < -50 || arw.x > canvas.width+50 || arw.y < -50 || arw.y > canvas.height+50){
+        const a = arrows[i];
+        a.px = a.x;                 // <— store previous
+        a.py = a.y;
+        a.x += a.vx * dt;
+        a.y += a.vy * dt;
+        a.life -= dt;
+        if (a.life <= 0 || a.x < -50 || a.x > canvas.width+50 || a.y < -50 || a.y > canvas.height+50){
           arrows.splice(i, 1);
         }
       }
 
+
       // COLLISION: projectiles → player
+      // COLLISION: projectiles → player (swept segment vs circle)
       {
-        const pr = 18;
+        const pr = 18; // try 20–22 if you want a bit more leniency
         for (let i = arrows.length - 1; i >= 0; i--){
           const a = arrows[i];
-          const dx = a.x - player.x, dy = a.y - player.y;
-          if (dx*dx + dy*dy <= pr*pr){
+          if (circleSegHit(player.x, player.y, pr, a.px, a.py, a.x, a.y)){
             arrows.splice(i, 1);
-            takeHit(a.x, a.y); // pass source for FX/knockback + SFX
+            takeHit(a.x, a.y);  // keep your knockback/FX source
           }
         }
       }
+
 
       // COLLISION: attacker body → player (instant game over)
       {
