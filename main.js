@@ -28,6 +28,74 @@
     clickBuffer = await audioCtx.decodeAudioData(arr);
   }
 
+  // --- Background Music (looping) ---
+  let bgmBuffer = null;
+  let bgmSource = null;
+  let bgmGain = null;
+
+  async function loadBgm() {
+    if (!audioCtx) return;
+    if (bgmBuffer) return; // already loaded
+    const res = await fetch('assets/bgmusic.mp3', { cache: 'no-store' });
+    const arr = await res.arrayBuffer();
+    bgmBuffer = await audioCtx.decodeAudioData(arr);
+    if (!bgmGain) {
+      bgmGain = audioCtx.createGain();
+      bgmGain.gain.value = 0; // fade in later
+      bgmGain.connect(audioCtx.destination);
+    }
+  }
+
+  function startBgm(volume = 0.25, fadeMs = 600) {
+    // respect sound setting
+    const snd = localStorage.getItem('arrowSurvival:sound') || 'on';
+    if (snd !== 'on') { stopBgm(true); return; }
+
+    if (!audioCtx || !bgmBuffer) return;
+    ensureAudioReady();
+
+    // stop any existing source first
+    stopBgm(true);
+
+    bgmSource = audioCtx.createBufferSource();
+    bgmSource.buffer = bgmBuffer;
+    bgmSource.loop = true;
+    bgmSource.connect(bgmGain);
+
+    const now = audioCtx.currentTime;
+    try {
+      bgmGain.gain.cancelScheduledValues(now);
+      bgmGain.gain.setValueAtTime(0.0001, now);
+      bgmGain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), now + fadeMs / 1000);
+    } catch {}
+    bgmSource.start(now);
+  }
+
+  function stopBgm(immediate = false) {
+    if (!audioCtx || !bgmSource || !bgmGain) return;
+    const now = audioCtx.currentTime;
+    if (immediate) {
+      try { bgmSource.stop(); } catch {}
+      try { bgmSource.disconnect(); } catch {}
+      bgmSource = null;
+      try { bgmGain.gain.setValueAtTime(0.0001, now); } catch {}
+      return;
+    }
+    try {
+      bgmGain.gain.cancelScheduledValues(now);
+      bgmGain.gain.setValueAtTime(bgmGain.gain.value, now);
+      const end = now + 0.35;
+      bgmGain.gain.exponentialRampToValueAtTime(0.0001, end);
+      bgmSource.stop(end + 0.05);
+    } catch {}
+    setTimeout(() => {
+      if (bgmSource) {
+        try { bgmSource.disconnect(); } catch {}
+        bgmSource = null;
+      }
+    }, 450);
+  }
+
   // Some browsers require a user gesture before resuming AudioContext
   function ensureAudioReady() {
     if (!audioCtx) return;
@@ -44,14 +112,17 @@
       const src = audioCtx.createBufferSource();
       src.buffer = clickBuffer;
       src.connect(clickGain);
+      // start immediately with zero scheduling delay
       src.start(0);
       return;
     }
+    // Fallback (rare): if buffer not ready yet, fall back to <audio>
     const a = new Audio('assets/click.wav');
     a.volume = 0.8;
     a.play();
   }
 
+  // Initialize audio on the first user interaction (required by autoplay policies)
   window.addEventListener('pointerdown', async () => { try { await initAudio(); } catch {} }, { once: true });
 
   function showToast(msg){
@@ -69,6 +140,7 @@
   });
 
   // ----- PLAY -----
+  // Landing page: Play → go to game page
   playBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     window.location.href = 'game.html';
@@ -141,6 +213,7 @@
     osc.connect(g).connect(audioCtx.destination);
     const now = audioCtx.currentTime;
     osc.start(now);
+    // fade in/out to avoid clicks
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(gain, now + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
@@ -148,6 +221,7 @@
   }
 
   // ====== Countdown that blurs the game background on game.html ======
+  // Usage: call startCountdown(() => { /* start gameplay */ }) on the game page.
   let isCounting = false;
   async function startCountdown(onDone){
     if (isCounting) return;
@@ -156,6 +230,7 @@
 
     const overlay = document.getElementById('countOverlay');
     const numEl   = document.getElementById('countNum');
+    // Target #gameBg on game page; fallback to .hero if called on landing (won't blur landing now)
     const gameBg  = document.getElementById('gameBg') || document.querySelector('.hero');
 
     if (!overlay || !numEl || !gameBg){
@@ -173,12 +248,15 @@
     const tick = () => {
       const n = seq[i];
       numEl.textContent = n;
+      // 3→2→1 tones (420, 540, 660 Hz)
       tone(420 + i * 120, 0.28, 'sine', 0.28);
+      // retrigger pop animation
       numEl.style.animation = 'none'; void numEl.offsetWidth; numEl.style.animation = '';
       i++;
       if (i < seq.length){
         setTimeout(tick, 820);
       } else {
+        // GO sting, then unblur and finish
         setTimeout(() => {
           tone(880, 0.12, 'square', 0.25);
           setTimeout(() => tone(1200, 0.18, 'square', 0.2), 90);
@@ -193,6 +271,7 @@
     tick();
   }
 
+  // Expose startCountdown to the page scope (so game.html inline script can call it)
   window.startCountdown = startCountdown;
 
   // ======================= GAME RUNTIME (12-frame sheets) =======================
@@ -222,14 +301,14 @@
       this.x = 400; this.y = 300;
       this.vx = 0; this.vy = 0;
       this.speed = 180;
-      this.stepFps = 10;
+      this.stepFps = 10;     // walk cycle speed
       this._acc = 0;
       this.scale = 0.5;
     }
     faceByVelocity(){
       const ax = Math.abs(this.vx), ay = Math.abs(this.vy);
-      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;
-      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;
+      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;        // Right / Left
+      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;    // Down / Up
     }
     update(dt){
       this.x += this.vx * dt;
@@ -240,25 +319,33 @@
         const frameDur = 1 / this.stepFps;
         while (this._acc >= frameDur){
           this._acc -= frameDur;
-          this.col = (this.col + 1) % this.cols;
+          this.col = (this.col + 1) % this.cols; // 0→1→2→0
         }
       } else {
-        this.col = 0;
+        this.col = 0; // idle
       }
     }
     draw(ctx){
-      const PAD = 4;
+      const PAD = 4; // inset to avoid sampling neighbor frame (use 1 if needed)
+    
+      // source rect (slightly inset)
       const sx = Math.floor(this.col * this.fw + PAD);
       const sy = Math.floor(this.row * this.fh + PAD);
       const sw = Math.ceil(this.fw - PAD * 2);
       const sh = Math.ceil(this.fh - PAD * 2);
+    
+      // destination size (respect scale) snapped to integers
       const scale = this.scale ?? 1;
       const dw = Math.round(this.fw * scale);
       const dh = Math.round(this.fh * scale);
+    
+      // destination position snapped to integers
       const dx = Math.round(this.x - dw / 2);
       const dy = Math.round(this.y - dh / 2);
+    
       ctx.drawImage(this.img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
+    
   }
 
   // projectiles
@@ -317,9 +404,10 @@
       diamonds += 1;
       diamond = null;
       updateHUD();
-      scheduleDiamondSpawn(2000);
+      scheduleDiamondSpawn(2000); // spawn next after 2s
     }
     function showGameOver(){
+      stopBgm();
       isGameOver = true;
       finalScoreEl.textContent = `Score: ${diamonds}`;
       if (diamonds > best){
@@ -332,31 +420,53 @@
     function takeHit(){
       if (invuln > 0 || isGameOver) return;
       lives = Math.max(0, lives - 1);
-      invuln = 1.0;
+      invuln = 1.0; // 1 second invulnerability
       updateHUD();
       if (lives <= 0) showGameOver();
     }
 
     updateHUD();
-    restartBtn?.addEventListener('click', () => location.reload());
-    homeBtn?.addEventListener('click', () => { location.href = 'index.html'; });
+
+    // Start background music on game start
+    try {
+      await initAudio();
+      await loadBgm();
+      startBgm(0.25, 500); // volume, fade-in ms
+    } catch {}
+
+    restartBtn?.addEventListener('click', () => { stopBgm(true); location.reload(); });
+    homeBtn?.addEventListener('click', () => { stopBgm(); location.href = 'index.html'; });
+    // Also stop music if the page is being closed or navigated away
+    window.addEventListener('pagehide', () => stopBgm(true));
+    window.addEventListener('beforeunload', () => stopBgm(true));
+
     scheduleDiamondSpawn(0);
 
     const canvas = document.getElementById('gameCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    canvas.style.imageRendering = 'pixelated';
+    ctx.imageSmoothingEnabled = false;        // <- no bilinear blur
+    canvas.style.imageRendering = 'pixelated'; // <- CSS nearest-neighbor
 
+    // Optional crisp pixel look:
+    // ctx.imageSmoothingEnabled = false;
+    // canvas.style.imageRendering = 'pixelated';
+
+    // scale canvas to screen while keeping 800x600 logical pixels
     function fitCanvas(){
+      // raw scale needed to fit 800x600 into the window
       const raw = Math.min(window.innerWidth / canvas.width,
                            window.innerHeight / canvas.height);
+    
+      // snap to 0.5 steps: 1.0, 1.5, 2.0, 2.5, ...
       const scale = Math.round(raw * 4) / 4;
+    
       canvas.style.position = 'absolute';
       canvas.style.left = '50%';
       canvas.style.top  = '50%';
       canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
     }
+    
     fitCanvas(); addEventListener('resize', fitCanvas);
 
     const [playerImg, attackerImg] = await Promise.all([
@@ -368,7 +478,7 @@
     player.x = canvas.width * 0.25;
     player.y = canvas.height * 0.5;
     player.speed = 350;
-    player.scale = 1;
+    player.scale = 1; // tweak 0.8–1.2 if needed
 
     // -------- Difficulty → attackers count --------
     function getDifficulty(){
@@ -542,7 +652,7 @@
       // DIAMOND collection
       if (diamond){
         const dx = diamond.x - player.x, dy = diamond.y - player.y;
-        const r = 18 + diamond.size;
+        const r = 18 + diamond.size; // pickup radius
         if (dx*dx + dy*dy <= r*r){
           collectDiamond();
         }
@@ -555,7 +665,7 @@
       if (diamond){
         const _now = (typeof now === 'number' ? now : performance.now());
         const pulse = 1 + 0.06 * Math.sin(_now * 0.006);
-        const px = Math.max(20, diamond.size * 1.8) * pulse;
+        const px = Math.max(20, diamond.size * 1.8) * pulse; // emoji size
 
         ctx.save();
         ctx.translate(diamond.x, diamond.y);
@@ -563,6 +673,7 @@
         ctx.textBaseline = 'middle';
         ctx.font = `${px}px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif`;
 
+        // outer glow
         ctx.save();
         ctx.globalAlpha = 0.9;
         ctx.shadowColor = 'rgba(0,220,255,0.9)';
@@ -570,7 +681,9 @@
         ctx.fillText('💎', 0, 0);
         ctx.restore();
 
+        // glyph
         ctx.fillText('💎', 0, 0);
+
         ctx.restore();
       }
 
