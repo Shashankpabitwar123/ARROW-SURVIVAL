@@ -19,10 +19,9 @@
       latencyHint: 'interactive'
     });
     clickGain = audioCtx.createGain();
-    clickGain.gain.value = 0.8; // volume 0.0–1.0
+    clickGain.gain.value = 0.8;
     clickGain.connect(audioCtx.destination);
 
-    // Fetch & decode once (no playback yet)
     const res = await fetch('assets/click.wav', { cache: 'no-store' });
     const arr = await res.arrayBuffer();
     clickBuffer = await audioCtx.decodeAudioData(arr);
@@ -35,27 +34,24 @@
 
   async function loadBgm() {
     if (!audioCtx) return;
-    if (bgmBuffer) return; // already loaded
+    if (bgmBuffer) return;
     const res = await fetch('assets/bgmusic.mp3', { cache: 'no-store' });
     const arr = await res.arrayBuffer();
     bgmBuffer = await audioCtx.decodeAudioData(arr);
     if (!bgmGain) {
       bgmGain = audioCtx.createGain();
-      bgmGain.gain.value = 0; // fade in later
+      bgmGain.gain.value = 0;
       bgmGain.connect(audioCtx.destination);
     }
   }
 
   function startBgm(volume = 0.25, fadeMs = 600) {
-    // respect sound setting
     const snd = localStorage.getItem('arrowSurvival:sound') || 'on';
     if (snd !== 'on') { stopBgm(true); return; }
-
     if (!audioCtx || !bgmBuffer) return;
     ensureAudioReady();
 
-    // stop any existing source first
-    stopBgm(true);
+    stopBgm(true); // stop any existing source first
 
     bgmSource = audioCtx.createBufferSource();
     bgmSource.buffer = bgmBuffer;
@@ -96,6 +92,49 @@
     }, 450);
   }
 
+  // --- 1s HIT SOUND EFFECT (synth) ---
+  function playHitSfx() {
+    const snd = localStorage.getItem('arrowSurvival:sound') || 'on';
+    if (snd !== 'on' || !audioCtx) return;
+    ensureAudioReady();
+
+    const t0 = audioCtx.currentTime;
+    const dur = 1.0;
+
+    const osc1 = audioCtx.createOscillator(); // body
+    const osc2 = audioCtx.createOscillator(); // grit
+    const lp = audioCtx.createBiquadFilter();
+    const g = audioCtx.createGain();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'square';
+    lp.type = 'lowpass';
+
+    // pitch sweep
+    osc1.frequency.setValueAtTime(820, t0);
+    osc1.frequency.exponentialRampToValueAtTime(150, t0 + 0.55);
+    osc2.frequency.setValueAtTime(420, t0);
+    osc2.frequency.exponentialRampToValueAtTime(120, t0 + 0.55);
+
+    // filter sweep
+    lp.frequency.setValueAtTime(2400, t0);
+    lp.frequency.exponentialRampToValueAtTime(900, t0 + dur);
+
+    // amplitude envelope
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    osc1.connect(g);
+    osc2.connect(g);
+    g.connect(lp).connect(audioCtx.destination);
+
+    osc1.start(t0);
+    osc2.start(t0);
+    osc1.stop(t0 + dur + 0.05);
+    osc2.stop(t0 + dur + 0.05);
+  }
+
   // Some browsers require a user gesture before resuming AudioContext
   function ensureAudioReady() {
     if (!audioCtx) return;
@@ -103,7 +142,6 @@
   }
 
   function playClick() {
-    // Respect your UI sound setting if you want; right now we always play
     const snd = localStorage.getItem('arrowSurvival:sound') || 'on';
     if (snd !== 'on') return;
 
@@ -112,17 +150,14 @@
       const src = audioCtx.createBufferSource();
       src.buffer = clickBuffer;
       src.connect(clickGain);
-      // start immediately with zero scheduling delay
       src.start(0);
       return;
     }
-    // Fallback (rare): if buffer not ready yet, fall back to <audio>
     const a = new Audio('assets/click.wav');
     a.volume = 0.8;
     a.play();
   }
 
-  // Initialize audio on the first user interaction (required by autoplay policies)
   window.addEventListener('pointerdown', async () => { try { await initAudio(); } catch {} }, { once: true });
 
   function showToast(msg){
@@ -134,13 +169,10 @@
 
   // ----- Global click sound for all buttons -----
   document.addEventListener('click', (e) => {
-    if (e.target.closest('button')) {
-      playClick();
-    }
+    if (e.target.closest('button')) playClick();
   });
 
   // ----- PLAY -----
-  // Landing page: Play → go to game page
   playBtn?.addEventListener('click', (e) => {
     e.preventDefault();
     window.location.href = 'game.html';
@@ -213,15 +245,13 @@
     osc.connect(g).connect(audioCtx.destination);
     const now = audioCtx.currentTime;
     osc.start(now);
-    // fade in/out to avoid clicks
     g.gain.setValueAtTime(0.0001, now);
     g.gain.exponentialRampToValueAtTime(gain, now + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     osc.stop(now + dur + 0.05);
   }
 
-  // ====== Countdown that blurs the game background on game.html ======
-  // Usage: call startCountdown(() => { /* start gameplay */ }) on the game page.
+  // ====== Countdown ======
   let isCounting = false;
   async function startCountdown(onDone){
     if (isCounting) return;
@@ -230,7 +260,6 @@
 
     const overlay = document.getElementById('countOverlay');
     const numEl   = document.getElementById('countNum');
-    // Target #gameBg on game page; fallback to .hero if called on landing (won't blur landing now)
     const gameBg  = document.getElementById('gameBg') || document.querySelector('.hero');
 
     if (!overlay || !numEl || !gameBg){
@@ -248,15 +277,12 @@
     const tick = () => {
       const n = seq[i];
       numEl.textContent = n;
-      // 3→2→1 tones (420, 540, 660 Hz)
       tone(420 + i * 120, 0.28, 'sine', 0.28);
-      // retrigger pop animation
       numEl.style.animation = 'none'; void numEl.offsetWidth; numEl.style.animation = '';
       i++;
       if (i < seq.length){
         setTimeout(tick, 820);
       } else {
-        // GO sting, then unblur and finish
         setTimeout(() => {
           tone(880, 0.12, 'square', 0.25);
           setTimeout(() => tone(1200, 0.18, 'square', 0.2), 90);
@@ -270,17 +296,10 @@
     };
     tick();
   }
-
-  // Expose startCountdown to the page scope (so game.html inline script can call it)
   window.startCountdown = startCountdown;
 
   // ======================= GAME RUNTIME (12-frame sheets) =======================
-  // Expects:
-  //   assets/player.png   (4 rows: Down, Left, Right, Up; 3 cols: Idle, StepA, StepB)
-  //   assets/attacker.png (same layout)
-  // Runs on game.html after the countdown dispatches 'arrowSurvival:gameStart'
 
-  // ---- helpers ----
   function loadImage(src){
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -301,14 +320,14 @@
       this.x = 400; this.y = 300;
       this.vx = 0; this.vy = 0;
       this.speed = 180;
-      this.stepFps = 10;     // walk cycle speed
+      this.stepFps = 10;
       this._acc = 0;
       this.scale = 0.5;
     }
     faceByVelocity(){
       const ax = Math.abs(this.vx), ay = Math.abs(this.vy);
-      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;        // Right / Left
-      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;    // Down / Up
+      if (ax > ay) this.row = (this.vx > 0) ? 2 : 1;
+      else if (ay > 0) this.row = (this.vy > 0) ? 0 : 3;
     }
     update(dt){
       this.x += this.vx * dt;
@@ -319,33 +338,25 @@
         const frameDur = 1 / this.stepFps;
         while (this._acc >= frameDur){
           this._acc -= frameDur;
-          this.col = (this.col + 1) % this.cols; // 0→1→2→0
+          this.col = (this.col + 1) % this.cols;
         }
       } else {
-        this.col = 0; // idle
+        this.col = 0;
       }
     }
     draw(ctx){
-      const PAD = 4; // inset to avoid sampling neighbor frame (use 1 if needed)
-    
-      // source rect (slightly inset)
+      const PAD = 4;
       const sx = Math.floor(this.col * this.fw + PAD);
       const sy = Math.floor(this.row * this.fh + PAD);
       const sw = Math.ceil(this.fw - PAD * 2);
       const sh = Math.ceil(this.fh - PAD * 2);
-    
-      // destination size (respect scale) snapped to integers
       const scale = this.scale ?? 1;
       const dw = Math.round(this.fw * scale);
       const dh = Math.round(this.fh * scale);
-    
-      // destination position snapped to integers
       const dx = Math.round(this.x - dw / 2);
       const dy = Math.round(this.y - dh / 2);
-    
       ctx.drawImage(this.img, sx, sy, sw, sh, dx, dy, dw, dh);
     }
-    
   }
 
   // projectiles
@@ -382,6 +393,11 @@
     let invuln = 0;
     let isGameOver = false;
 
+    // hit animation + knockback
+    let hitAnim = 0;
+    const hitAnimMax = 0.35;
+    let kbX = 0, kbY = 0;
+
     // Diamond state
     let diamond = null;       // { x, y, size }
     let diamondTimer = null;  // timeout id
@@ -404,7 +420,7 @@
       diamonds += 1;
       diamond = null;
       updateHUD();
-      scheduleDiamondSpawn(2000); // spawn next after 2s
+      scheduleDiamondSpawn(2000);
     }
     function showGameOver(){
       stopBgm();
@@ -417,10 +433,27 @@
       bestScoreEl.textContent = `Best: ${best}`;
       gameOverEl.classList.remove('hidden');
     }
-    function takeHit(){
+    function takeHit(srcX, srcY){
       if (invuln > 0 || isGameOver) return;
+
+      // visual FX start
+      hitAnim = hitAnimMax;
+
+      // knockback away from hit source
+      if (typeof srcX === 'number' && typeof srcY === 'number'){
+        const dx = player.x - srcX, dy = player.y - srcY;
+        const len = Math.hypot(dx, dy) || 1;
+        const force = 420;
+        kbX += (dx / len) * force;
+        kbY += (dy / len) * force;
+      }
+
+      // 1s hit sound
+      playHitSfx();
+
+      // damage + i-frames
       lives = Math.max(0, lives - 1);
-      invuln = 1.0; // 1 second invulnerability
+      invuln = 1.0;
       updateHUD();
       if (lives <= 0) showGameOver();
     }
@@ -431,12 +464,11 @@
     try {
       await initAudio();
       await loadBgm();
-      startBgm(0.25, 500); // volume, fade-in ms
+      startBgm(0.25, 500);
     } catch {}
 
     restartBtn?.addEventListener('click', () => { stopBgm(true); location.reload(); });
     homeBtn?.addEventListener('click', () => { stopBgm(); location.href = 'index.html'; });
-    // Also stop music if the page is being closed or navigated away
     window.addEventListener('pagehide', () => stopBgm(true));
     window.addEventListener('beforeunload', () => stopBgm(true));
 
@@ -445,28 +477,18 @@
     const canvas = document.getElementById('gameCanvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;        // <- no bilinear blur
-    canvas.style.imageRendering = 'pixelated'; // <- CSS nearest-neighbor
+    ctx.imageSmoothingEnabled = false;
+    canvas.style.imageRendering = 'pixelated';
 
-    // Optional crisp pixel look:
-    // ctx.imageSmoothingEnabled = false;
-    // canvas.style.imageRendering = 'pixelated';
-
-    // scale canvas to screen while keeping 800x600 logical pixels
     function fitCanvas(){
-      // raw scale needed to fit 800x600 into the window
       const raw = Math.min(window.innerWidth / canvas.width,
                            window.innerHeight / canvas.height);
-    
-      // snap to 0.5 steps: 1.0, 1.5, 2.0, 2.5, ...
       const scale = Math.round(raw * 4) / 4;
-    
       canvas.style.position = 'absolute';
       canvas.style.left = '50%';
       canvas.style.top  = '50%';
       canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
     }
-    
     fitCanvas(); addEventListener('resize', fitCanvas);
 
     const [playerImg, attackerImg] = await Promise.all([
@@ -478,7 +500,7 @@
     player.x = canvas.width * 0.25;
     player.y = canvas.height * 0.5;
     player.speed = 350;
-    player.scale = 1; // tweak 0.8–1.2 if needed
+    player.scale = 1;
 
     // -------- Difficulty → attackers count --------
     function getDifficulty(){
@@ -488,9 +510,8 @@
     }
     const diff = getDifficulty();
     const numAttackers = (diff === 'hard') ? 3
-                    : (diff === 'medium' || diff === 'normal') ? 2
-                    : 1;
-
+                      : (diff === 'medium' || diff === 'normal') ? 2
+                      : 1;
 
     const attackers = [];
     const shootEvery = 3.0;
@@ -498,24 +519,21 @@
     function spawnAttackers(n){
       for (let i = 0; i < n; i++){
         const a = new SpriteSheet(attackerImg, 1, 1);
-        a.speed = 95 + Math.random() * 30;      // slight speed variance
+        a.speed = 95 + Math.random() * 30;
         a.scale = 1;
-    
-        // spread initial positions
+
         const ang = (i / Math.max(1, n)) * Math.PI * 2;
         a.x = canvas.width * 0.75 + Math.cos(ang) * 150;
         a.y = canvas.height * 0.50 + Math.sin(ang) * 150;
-    
-        // unique orbit/strafe params
+
         a.phase   = Math.random() * Math.PI * 2;
-        a.freq    = 0.7 + Math.random() * 0.6;  // Hz-ish
-        a.orbitR  = 170  + Math.random() * 80;   // px---------------------------------------
-        a.shootTimer = Math.random() * 2.0;     // stagger first shots
-    
+        a.freq    = 0.7 + Math.random() * 0.6;
+        a.orbitR  = 170 + Math.random() * 80;
+        a.shootTimer = Math.random() * 2.0;
+
         attackers.push(a);
       }
     }
-    
     spawnAttackers(numAttackers);
 
     function updatePlayerVelocity(){
@@ -531,62 +549,68 @@
     }
 
     function updateAttackersVelocity(t){
-      const SEP_RADIUS   = 300;   // start pushing apart under this distance  --------------------------
-      const SEP_WEIGHT   = 3;  // how strong separation bends direction  --------------------------
-    
+      const SEP_RADIUS = 300;
+      const SEP_WEIGHT = 3;
+
       for (const a of attackers){
-        // --- target offset: strafe around player on a little orbit ---
         const dxp = player.x - a.x, dyp = player.y - a.y;
         const lenp = Math.hypot(dxp, dyp) || 1;
-        const nx = dxp / lenp, ny = dyp / lenp;     // to player (unit)
-        const px = -ny, py = nx;                    // perpendicular (unit)
-    
-        const strafe = Math.sin(t * a.freq + a.phase); // -1..1
+        const nx = dxp / lenp, ny = dyp / lenp;
+        const px = -ny, py = nx;
+
+        const strafe = Math.sin(t * a.freq + a.phase);
         const tx = player.x + px * (strafe * a.orbitR);
         const ty = player.y + py * (strafe * a.orbitR);
-    
-        // base chase toward offset target
+
         let dx = tx - a.x, dy = ty - a.y;
         let len = Math.hypot(dx, dy) || 1;
         let vx = dx / len, vy = dy / len;
-    
-        // --- separation from other attackers (short-range repulsion) ---
+
         let sx = 0, sy = 0;
         for (const b of attackers){
           if (b === a) continue;
           const ddx = a.x - b.x, ddy = a.y - b.y;
           const d   = Math.hypot(ddx, ddy) || 1e-6;
           if (d < SEP_RADIUS){
-            const push = (SEP_RADIUS - d) / SEP_RADIUS; // 0..1
+            const push = (SEP_RADIUS - d) / SEP_RADIUS;
             sx += (ddx / d) * push;
             sy += (ddy / d) * push;
           }
         }
-    
-        // blend base chase with separation and renormalize to speed
+
         vx += sx * SEP_WEIGHT;
         vy += sy * SEP_WEIGHT;
-    
+
         len = Math.hypot(vx, vy) || 1;
         a.vx = (vx / len) * a.speed;
         a.vy = (vy / len) * a.speed;
       }
     }
-    
 
     // main loop
     let last = performance.now();
-    let elapsed = 0; 
+    let elapsed = 0;
 
     function loop(now){
       const dt = Math.min(0.033, (now - last)/1000);
       last = now;
-      elapsed += dt;  
+      elapsed += dt;
 
       if (invuln > 0) invuln = Math.max(0, invuln - dt);
+      if (hitAnim > 0) hitAnim = Math.max(0, hitAnim - dt);
       if (isGameOver) return;
 
       updatePlayerVelocity();
+
+      // apply knockback impulse & decay (affects this frame's velocity)
+      player.vx += kbX;
+      player.vy += kbY;
+      {
+        const damp = Math.exp(-8 * dt);
+        kbX *= damp;
+        kbY *= damp;
+      }
+
       updateAttackersVelocity(elapsed);
 
       player.update(dt);
@@ -630,7 +654,7 @@
           const dx = a.x - player.x, dy = a.y - player.y;
           if (dx*dx + dy*dy <= pr*pr){
             arrows.splice(i, 1);
-            takeHit();
+            takeHit(a.x, a.y); // pass source for FX/knockback + SFX
           }
         }
       }
@@ -641,9 +665,13 @@
         for (const a of attackers){
           const dx = a.x - player.x, dy = a.y - player.y;
           if (dx*dx + dy*dy <= (pr + ar) * (pr + ar)){
-            lives = 0;
-            updateHUD();
-            showGameOver();
+            // show hit FX/SFX this frame, then force game over
+            takeHit(a.x, a.y);
+            if (!isGameOver) { // ensure we don't double-trigger
+              lives = 0;
+              updateHUD();
+              showGameOver();
+            }
             break;
           }
         }
@@ -652,20 +680,21 @@
       // DIAMOND collection
       if (diamond){
         const dx = diamond.x - player.x, dy = diamond.y - player.y;
-        const r = 18 + diamond.size; // pickup radius
+        const r = 18 + diamond.size;
         if (dx*dx + dy*dy <= r*r){
           collectDiamond();
         }
       }
 
       // draw
+      const ctx = canvas.getContext('2d');
       ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      // draw diamond as emoji (matches high score), with glow
+      // diamond (emoji + glow)
       if (diamond){
         const _now = (typeof now === 'number' ? now : performance.now());
         const pulse = 1 + 0.06 * Math.sin(_now * 0.006);
-        const px = Math.max(20, diamond.size * 1.8) * pulse; // emoji size
+        const px = Math.max(20, diamond.size * 1.8) * pulse;
 
         ctx.save();
         ctx.translate(diamond.x, diamond.y);
@@ -673,7 +702,6 @@
         ctx.textBaseline = 'middle';
         ctx.font = `${px}px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif`;
 
-        // outer glow
         ctx.save();
         ctx.globalAlpha = 0.9;
         ctx.shadowColor = 'rgba(0,220,255,0.9)';
@@ -681,13 +709,11 @@
         ctx.fillText('💎', 0, 0);
         ctx.restore();
 
-        // glyph
         ctx.fillText('💎', 0, 0);
-
         ctx.restore();
       }
 
-      // draw arrows as lines
+      // arrows as lines
       ctx.lineWidth = 3;
       for (const a of arrows){
         ctx.beginPath();
@@ -696,7 +722,37 @@
         ctx.stroke();
       }
 
-      player.draw(ctx);
+      // red glow under player when hit
+      if (hitAnim > 0){
+        const p = hitAnim / hitAnimMax;          // 1 → 0
+        const rad = 28 + (1 - p) * 22;
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const grad = ctx.createRadialGradient(player.x, player.y, rad*0.2, player.x, player.y, rad);
+        grad.addColorStop(0.00, 'rgba(255,120,120,0.55)');
+        grad.addColorStop(0.60, 'rgba(255,60,60,0.35)');
+        grad.addColorStop(1.00, 'rgba(255,0,0,0.0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, rad, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // draw player (flicker while hit)
+      {
+        const tNow = (typeof now === 'number' ? now : performance.now());
+        if (hitAnim > 0){
+          ctx.save();
+          const alpha = 0.7 + 0.3 * Math.abs(Math.sin(tNow * 0.05)); // 0.7–1.0
+          ctx.globalAlpha = alpha;
+          player.draw(ctx);
+          ctx.restore();
+        } else {
+          player.draw(ctx);
+        }
+      }
+
       for (const a of attackers) a.draw(ctx);
 
       requestAnimationFrame(loop);
